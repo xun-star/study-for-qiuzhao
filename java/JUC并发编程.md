@@ -139,3 +139,154 @@ run⽅法可以被执⾏⽆数次，⽽star⽅法只能被执⾏⼀次，原因�
 # 线程池
 
 线程池就是一个可以容纳多个线程的对象，其中的线程可以反复利用，省去了频繁创建线程对象的操作，从而过多的消耗资源
+
+## 线程池的优势
+
+1. 降低资源消耗。通过重复利用已经创建好的线程，来降低线程的创建和销毁的开销
+2. 提高响应速度。当任务到达时，可以直接使用线程，而不需要去创建
+3. 提高线程的可管理性。使用线程池，可以进行统一的分配，调优和监控
+
+# 并发容器
+
+## BlockingQueue
+
+在所有的并发容器中，BlockingQueue是最为常见的一种，它是一个带阻塞功能的队列，当入队列时，若队列已满，则阻塞调用者；当出队列时，若队列已空，则阻塞调用者
+
+![image-20240126195730416](D:\study-for-qiuzhao\java\assets\image-20240126195730416.png)
+
+* ArrayBlockingQueue（核心是一把锁，两个条件）
+
+  它是一个用数组实现的环形队列，在构造函数中，要求传入数组的容量
+
+  ```java
+  public class ArrayBlockingQueue<E> extends AbstractQueue<E>
+          implements BlockingQueue<E>, java.io.Serializable {
+      /** The queued items */
+      @SuppressWarnings("serial") // Conditionally serializable
+      final Object[] items;//数组
+      
+          /** items index for next take, poll, peek or remove */
+      int takeIndex;//队列的头索引
+      
+          /** items index for next put, offer, or add */
+      int putIndex;//队列的尾索引
+      
+          /** Number of elements in the queue */
+      int count;//数组大小
+      
+          /** Main lock guarding all access */
+      final ReentrantLock lock;//锁
+      
+          /** Condition for waiting takes */
+      @SuppressWarnings("serial")  // Classes implementing Condition may be serializable.
+      private final Condition notEmpty;
+  
+      /** Condition for waiting puts */
+      @SuppressWarnings("serial")  // Classes implementing Condition may be serializable.
+      private final Condition notFull;
+  
+      /**
+       * Shared state for currently active iterators, or null if there
+       * are known not to be any.  Allows queue operations to update
+       * iterator state.
+       */
+      transient Itrs itrs;
+      
+      //构造函数
+      public ArrayBlockingQueue(int capacity) {
+          this(capacity, false);
+      }
+  
+      /**
+       * Creates an {@code ArrayBlockingQueue} with the given (fixed)
+       * capacity and the specified access policy.
+       * 
+       * @param capacity the capacity of this queue
+       * @param fair if {@code true} then queue accesses for threads blocked
+       *        on insertion or removal, are processed in FIFO order;
+       *        if {@code false} the access order is unspecified.
+       * @throws IllegalArgumentException if {@code capacity < 1}
+       */
+      public ArrayBlockingQueue(int capacity, boolean fair) {
+          if (capacity <= 0)
+              throw new IllegalArgumentException();
+          this.items = new Object[capacity];
+          lock = new ReentrantLock(fair);
+          notEmpty = lock.newCondition();
+          notFull =  lock.newCondition();
+      }
+      
+      //put函数
+      public void put(E e) throws InterruptedException {
+          Objects.requireNonNull(e);
+          final ReentrantLock lock = this.lock;
+          lock.lockInterruptibly();//可中断的lock
+          try {
+              while (count == items.length)
+                  notFull.await();//若队列满了，则阻塞
+              enqueue(e);
+          } finally {
+              lock.unlock();
+          }
+      }
+      //take函数
+      public E take() throws InterruptedException {
+          final ReentrantLock lock = this.lock;
+          lock.lockInterruptibly();
+          try {
+              while (count == 0)
+                  notEmpty.await();//若队列为空，则阻塞
+              return dequeue();
+          } finally {
+              lock.unlock();
+          }
+      }
+  }
+  ```
+
+* LinkedBlockingQueue
+
+  是一种基于单向链表的阻塞队列，因为队头和队尾是两个指针分开操作的，所以用了两个条件+两把锁，同时有一个Atomicleteger的原子变量记录count数
+
+  ```java
+  public class LinkedBlockingQueue<E> extends AbstractQueue<E>
+          implements BlockingQueue<E>, java.io.Serializable {
+      
+      /** The capacity bound, or Integer.MAX_VALUE if none */
+      private final int capacity;//容量
+  
+      /** Current number of elements */
+      private final AtomicInteger count = new AtomicInteger();
+  
+      /**
+       * Head of linked list.
+       * Invariant: head.item == null
+       */
+      transient Node<E> head;
+  
+      /**
+       * Tail of linked list.
+       * Invariant: last.next == null
+       */
+      private transient Node<E> last;
+  
+      /** Lock held by take, poll, etc */
+      private final ReentrantLock takeLock = new ReentrantLock();
+  
+      /** Wait queue for waiting takes */
+      @SuppressWarnings("serial") // Classes implementing Condition may be serializable.
+      private final Condition notEmpty = takeLock.newCondition();
+  
+      /** Lock held by put, offer, etc */
+      private final ReentrantLock putLock = new ReentrantLock();
+  
+      /** Wait queue for waiting puts */
+      @SuppressWarnings("serial") // Classes implementing Condition may be serializable.
+      private final Condition notFull = putLock.newCondition();
+  
+      
+  }
+  
+  ```
+
+  
